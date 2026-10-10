@@ -4,7 +4,7 @@
 
 GridQ plays out a day on a power grid in a 3D world. Every hour, a 10-qubit QAOA circuit (Qiskit, running on the backend you pick) proposes which of 10 power plants to switch on. Every proposal is priced exactly, the hours are stitched into a feasible 24-hour schedule, and the result is compared, under an equal evaluation budget, against simulated annealing, random search, the classic priority-list heuristic and the exact optimum.
 
-Team **Superposition** · Qollab × IonQ Hackathon 2026 · Theme: **Quantum Impact** · MIT licence
+Team **Superposition** · Qollab × IonQ Hackathon 2026 · Theme: **Quantum Impact** · MIT licence · Code: <https://github.com/shivamKumarG11/gridq>
 
 > This effort is supported by Qollab & IonQ.
 
