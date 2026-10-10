@@ -1,0 +1,6 @@
+__pycache__/
+node_modules/
+dist/
+dev/shots/
+dev/server.log
+results/precompute.log

@@ -1,0 +1,282 @@
+<div id="gq" class="gq">
+  <a class="skip" href="#gq-main">Skip to content</a>
+  <header class="gq-head">
+    <div class="brand">
+      <h1>GridQ</h1>
+      <p class="claim">Can QAOA find good power-plant schedules under demand swings, and how does it compare with classical search at the same budget?</p>
+    </div>
+    <nav aria-label="Views" class="tabs">
+      <button type="button" class="tab" data-view="world" aria-pressed="true">World</button>
+      <button type="button" class="tab" data-view="lab" aria-pressed="false">Quantum Lab</button>
+      <button type="button" class="tab" data-view="race" aria-pressed="false">The race</button>
+      <button type="button" class="tab" data-view="method" aria-pressed="false">Method</button>
+    </nav>
+  </header>
+  <p id="status" class="status" role="status" aria-live="polite">Loading the engine (Python + Qiskit in your browser)…</p>
+
+  <main id="gq-main">
+    <!-- WORLD -->
+    <section id="view-world" class="view world-view" aria-label="World">
+      <aside class="runpanel panel" aria-label="Run controls">
+        <h2 class="eyebrow">Run</h2>
+        <label for="in-scenario">Scenario</label>
+        <select id="in-scenario"></select>
+        <label for="in-shift">Demand shift <output id="out-shift" for="in-shift">0%</output></label>
+        <input id="in-shift" type="range" min="-20" max="0" step="5" value="0">
+        <label for="in-solar">Solar at noon <output id="out-solar" for="in-solar">0 MW</output></label>
+        <input id="in-solar" type="range" min="0" max="600" step="50" value="0">
+        <label for="in-p">QAOA depth p</label>
+        <select id="in-p"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select>
+        <label for="in-budget">Evaluation budget per hour</label>
+        <select id="in-budget"><option>16</option><option>32</option><option selected>64</option><option>128</option><option>256</option></select>
+        <p class="hint">Same budget for QAOA, annealing and random search. QAOA's training is charged to it.</p>
+        <label for="in-shots">Shots per hour</label>
+        <select id="in-shots"><option>256</option><option selected>512</option><option>1024</option></select>
+        <button type="button" id="btn-run" class="primary">Run the day</button>
+        <p id="backend-note" class="hint"></p>
+      </aside>
+
+      <section class="stage" aria-label="3D world">
+        <div id="world" class="world" tabindex="0" role="application" aria-roledescription="3D grid world" aria-label="3D grid world. Arrow keys orbit the camera, plus and minus zoom, Space plays or pauses the day. Plants are also listed as buttons beside the world."></div>
+        <div class="ov ov-legend" aria-hidden="true">
+          <div class="eyebrow">Plant state</div>
+          <div><span class="dot dot-run"></span>Running <b id="lg-run">0</b></div>
+          <div><span class="dot dot-start"></span>Starting <b id="lg-start">0</b></div>
+          <div><span class="dot dot-off"></span>Off <b id="lg-off">0</b></div>
+          <div class="sep"></div>
+          <div class="muted">Line glow = MW flowing</div>
+        </div>
+        <div class="ov ov-clock">
+          <div id="clock" class="mono big">--:--</div>
+          <div id="clock-sub" class="muted">Hour - of 24</div>
+        </div>
+        <div id="callout" class="ov ov-callout mono" hidden></div>
+        <div class="ov ov-cam">
+          <button type="button" id="cam-reset" aria-label="Reset camera">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12a9 4 0 1 0 18 0a9 4 0 1 0 -18 0"></path><path d="M12 3v18"></path></svg>
+          </button>
+          <button type="button" id="cam-fly" aria-label="Fly to selected plant">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>
+          </button>
+          <button type="button" id="btn-super" aria-pressed="false">Superposition mode</button>
+        </div>
+        <div id="superpanel" class="ov ov-super" hidden>
+          <div class="eyebrow">Superposition mode · <span id="sp-hour"></span></div>
+          <p>Before measurement: each plant is one qubit. <b>Opacity and ring = P(on)</b> from the circuit's exact state. <b>Threads</b> = measured correlations: <span class="c-power">cyan, tend to be on together</span>; <span class="c-amber">amber, one or the other</span>.</p>
+          <div class="row">
+            <button type="button" id="btn-measure" class="primary">Measure one shot</button>
+            <button type="button" id="btn-unmeasure">Back to the state</button>
+          </div>
+          <p id="sp-result" class="mono small" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <aside class="side panel" aria-label="Schedule comparison">
+        <h2 class="eyebrow">Schedule shown</h2>
+        <div id="src-buttons" class="seg" role="group" aria-label="Schedule source"></div>
+        <div class="cards">
+          <div class="card"><span>Demand now</span><b id="st-demand" class="mono">-</b></div>
+          <div class="card"><span>Needed incl. 10% reserve</span><b id="st-need" class="mono">-</b></div>
+          <div class="card"><span>Committed capacity</span><b id="st-cap" class="mono">-</b></div>
+          <div class="card"><span>Feasible hours</span><b id="st-feas" class="mono">-</b></div>
+        </div>
+        <div class="box">
+          <h2 class="eyebrow">24-hour cost, same evaluation budget</h2>
+          <div id="cost-list" class="costs"></div>
+          <p id="cost-note" class="hint"></p>
+        </div>
+        <div class="box soft">
+          <h2 class="eyebrow" id="changed-title">What changed this hour</h2>
+          <p id="changed" class="small"></p>
+        </div>
+        <div id="inspector" class="box" hidden></div>
+        <div>
+          <h2 class="eyebrow">Plants</h2>
+          <div id="plant-buttons" class="plantbtns" role="group" aria-label="Select a plant"></div>
+        </div>
+      </aside>
+
+      <footer class="timeline panel" aria-label="Timeline">
+        <div class="row">
+          <button type="button" id="btn-play" class="round" aria-label="Play the day">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path id="play-icon" d="M7 5l12 7-12 7z"></path></svg>
+          </button>
+          <div class="seg" role="group" aria-label="Playback speed">
+            <button type="button" class="speed" data-speed="1" aria-pressed="false">1×</button>
+            <button type="button" class="speed" data-speed="4" aria-pressed="true">4×</button>
+            <button type="button" class="speed" data-speed="16" aria-pressed="false">16×</button>
+          </div>
+          <span id="tl-label" class="muted small"></span>
+        </div>
+        <div class="tl-chart">
+          <svg id="tl-svg" viewBox="0 0 1000 70" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <label for="in-hour" class="sr-only">Hour of day</label>
+          <input id="in-hour" type="range" min="1" max="24" value="12">
+          <div class="ticks mono small muted"><span>01:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+        </div>
+      </footer>
+
+      <section class="strip panel" aria-labelledby="strip-title">
+        <div class="row between">
+          <h2 class="eyebrow" id="strip-title">Schedule · rows G1–G10, columns hours 1–24</h2>
+          <span class="hint">Amber outline = differs from the exact optimum</span>
+        </div>
+        <div id="strip" class="stripgrid" role="img"></div>
+      </section>
+    </section>
+
+    <!-- QUANTUM LAB -->
+    <section id="view-lab" class="view lab-view" aria-label="Quantum Lab" hidden>
+      <div class="row between">
+        <h2 class="title">Quantum Lab: from one hour's problem to the plans QAOA proposes</h2>
+        <div class="row">
+          <label for="lab-hour">Hour</label>
+          <select id="lab-hour"></select>
+        </div>
+      </div>
+      <p id="lab-sub" class="muted"></p>
+      <div class="lab-grid">
+        <article class="panel step">
+          <h3><span class="num">1</span> Problem</h3>
+          <p>Choose plants to minimise cost and cover demand + reserve.</p>
+          <p class="formula mono">C(x) = Σᵢ cᵢ xᵢ + λ (Σᵢ pᵢ xᵢ − 1)²</p>
+          <p class="small muted">xᵢ ∈ {0,1}: plant i off/on · cᵢ: no-load cost + minimum-output premium · pᵢ = Pmaxᵢ / target · λ = 6 · target = demand + reserve + 60 MW. The QUBO is only a guide: every sampled plan is re-scored with the true cost.</p>
+          <div id="lab-lin" class="bars10" role="img"></div>
+          <p class="small muted">Bars: each plant's linear weight after expanding the penalty (amber = negative, pulls the plant ON; cyan = positive).</p>
+        </article>
+        <article class="panel step">
+          <h3><span class="num">2</span> Hamiltonian</h3>
+          <p class="formula mono">H = Σᵢ hᵢ Zᵢ + Σᵢ&lt;ⱼ Jᵢⱼ ZᵢZⱼ</p>
+          <p class="small muted">xᵢ = (1 − Zᵢ)/2. The demand penalty couples every pair, strongest between the big coal units.</p>
+          <div id="lab-J" class="jgrid" role="img"></div>
+        </article>
+        <article class="panel step wide">
+          <h3><span class="num">3</span> Circuit, drawn by Qiskit</h3>
+          <p id="lab-circ-stats" class="small muted"></p>
+          <pre id="lab-circ" class="circ" tabindex="0" aria-label="Qiskit text drawing of the QAOA circuit"></pre>
+        </article>
+        <article class="panel step">
+          <h3><span class="num">4</span> Landscape: expected cost ⟨H⟩ for every (γ, β), p = 1</h3>
+          <p class="small muted">Exact for 10 qubits (statevector, no shots). Click a cell, or use the sliders.</p>
+          <div class="land">
+            <canvas id="lab-land" width="400" height="400" aria-label="Energy landscape heatmap; low expected cost is bright"></canvas>
+            <div class="land-ctl">
+              <label for="lab-g">γ (cost angle) <output id="lab-g-out" class="mono"></output></label>
+              <input id="lab-g" type="range" min="0" max="19" step="1">
+              <label for="lab-b">β (mixer angle) <output id="lab-b-out" class="mono"></output></label>
+              <input id="lab-b" type="range" min="0" max="19" step="1">
+              <button type="button" id="lab-trained">Back to the trained angles</button>
+              <p class="small muted">Bright = low expected cost. The landscape minimises the QUBO guide, not the true cost, so its brightest cell is not always the best for real schedules: compare the outcome cards.</p>
+            </div>
+          </div>
+        </article>
+        <article class="panel step">
+          <h3><span class="num">5</span> Outcomes: probability of all 1,024 plans, cheapest → most expensive</h3>
+          <svg id="lab-dist" viewBox="0 0 1024 220" preserveAspectRatio="none" role="img" aria-label="Probability of each plan"></svg>
+          <div class="row between small mono"><span>best plan</span><span class="muted">infeasible plans in grey, right</span><span>worst</span></div>
+          <div class="cards">
+            <div class="card"><span>P(best plan): QAOA</span><b id="lab-pbest" class="mono c-good">-</b></div>
+            <div class="card"><span>P(best plan): random</span><b class="mono">1 / 1,024</b></div>
+            <div class="card"><span>P(feasible): QAOA</span><b id="lab-pfeas" class="mono">-</b></div>
+            <div class="card"><span>P(feasible): random</span><b id="lab-pfeas-r" class="mono">-</b></div>
+          </div>
+          <p class="small muted">Dashed line = uniform random guessing. Interference moves probability to the left as (γ, β) approach the landscape's minimum.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- RACE -->
+    <section id="view-race" class="view race-view" aria-label="The race" hidden>
+      <div class="row between">
+        <h2 class="title">The race: best 24-hour cost found vs evaluations spent</h2>
+        <div class="seg" role="group" aria-label="Scenario">
+          <button type="button" class="race-sc" data-sc="benchmark" aria-pressed="true">Benchmark day</button>
+          <button type="button" class="race-sc" data-sc="solar" aria-pressed="false">Solar day</button>
+        </div>
+      </div>
+      <div class="race-grid">
+        <article class="panel">
+          <p class="small muted">Gap to the exact MILP optimum (lower is better), mean of 5 seeds; band = best to worst seed. Budget = true-cost evaluations per hour; QAOA's training is charged to it. Precomputed locally with the same engine (experiments/precompute.py).</p>
+          <div id="race-chart" class="chart"></div>
+          <div id="race-legend" class="legend small"></div>
+        </article>
+        <aside class="panel race-side">
+          <div class="box warn">
+            <h3 class="eyebrow">Read this first</h3>
+            <p class="small">At 10 plants, exact search checks all 1,024 plans per hour instantly. This race measures how QAOA <em>behaves</em> as a proposal engine, not whether it beats a classical computer.</p>
+          </div>
+          <div id="race-summary"></div>
+        </aside>
+      </div>
+      <div class="race-grid">
+        <article class="panel">
+          <h3 class="eyebrow">Table: mean 24-hour cost by budget</h3>
+          <div class="tablewrap"><table id="race-table" class="tbl mono small"></table></div>
+        </article>
+        <article class="panel">
+          <h3 class="eyebrow">Depth and parameter transfer (ideal simulator)</h3>
+          <div class="tablewrap"><table id="depth-table" class="tbl mono small"></table></div>
+          <p class="small muted">P(top 5) = probability a single shot lands on one of the 5 cheapest feasible plans, averaged over the 24 hours. Transfer = angles trained once on the peak hour and reused.</p>
+        </article>
+      </div>
+      <div class="race-grid">
+        <article class="panel">
+          <h3 class="eyebrow">Noise: what today's trapped-ion error rates cost</h3>
+          <div class="tablewrap"><table id="noise-table" class="tbl mono small"></table></div>
+          <p class="small muted">Qiskit Aer with depolarising + readout errors set from IonQ's published fidelities (Forte-like: 2q 99.6%; Aria-like: RZZ ≈ 2 MS gates). Not IonQ's own simulator: pick an IonQ backend in Qollab's dialog to sample the peak hours there live.</p>
+        </article>
+        <article class="panel">
+          <h3 class="eyebrow">This run, one hour: best cost found vs evaluations</h3>
+          <div class="row"><label for="trace-hour">Hour</label><select id="trace-hour"></select></div>
+          <div id="trace-chart" class="chart small-chart"></div>
+          <p id="trace-note" class="small muted"></p>
+        </article>
+      </div>
+    </section>
+
+    <!-- METHOD -->
+    <section id="view-method" class="view method-view" aria-label="Method" hidden>
+      <div class="method-grid">
+        <article class="panel">
+          <h2 class="eyebrow">The one claim</h2>
+          <p class="lead">Can QAOA find good power-plant schedules under demand swings, and how does it compare with classical search at the same budget?</p>
+          <p>A useful answer either way: if QAOA loses, we show by how much, where, and why.</p>
+          <h3>Fair test</h3>
+          <p>QAOA, simulated annealing and random search get the same budget of true-cost evaluations per hour, and QAOA's training is charged to it. Every candidate is scored by the same exact dispatch and feasibility rules, and the same day-stitcher links the hours for all of them. An exact MILP solves the same, fully linked 24-hour problem, so the gap we report is against the real optimum.</p>
+          <h3>Hours are linked</h3>
+          <p>Start-up costs (hot or cold) and minimum up/down times connect the hours. The stitcher (beam search) enforces them: a proposal that breaks a rule is repaired by keeping or adding the cheapest allowed plants, and the number of repairs is reported.</p>
+          <h3>Impact you can see</h3>
+          <p>Shift demand or add solar and run the day again: the world shows which plants start, what it costs, and where QAOA and the optimum disagree.</p>
+        </article>
+        <article class="panel">
+          <h2 class="eyebrow">How a day is solved</h2>
+          <ol class="steps">
+            <li><b>QUBO per hour</b>: 10 binary decisions, 1 qubit per plant.</li>
+            <li><b>QAOA</b>: angles trained once on the peak hour with the exact statevector, then reused for every hour (parameter transfer).</li>
+            <li><b>Sample</b>: the Qiskit circuit runs on the backend you chose in Qollab's dialog. IonQ backends take one job, so the two peak hours are packed side by side into one 20-qubit circuit and the other hours use the ideal statevector.</li>
+            <li><b>Score</b>: every distinct sampled plan gets its true cost by economic dispatch (equal incremental cost).</li>
+            <li><b>Stitch</b>: the best 6 plans per hour go to the shared beam-search stitcher.</li>
+            <li><b>Compare</b>: against simulated annealing, random search, the priority-list heuristic and the exact MILP (HiGHS).</li>
+          </ol>
+          <div class="two">
+            <div class="box good">
+              <h3 class="eyebrow">What the demo establishes</h3>
+              <ul class="small"><li>How close QAOA gets to the true optimum on the standard 10-plant benchmark</li><li>How it compares with classical search at equal budget</li><li>How much IonQ-style noise changes the answer</li></ul>
+            </div>
+            <div class="box warn">
+              <h3 class="eyebrow">What it does not claim</h3>
+              <ul class="small"><li>No quantum advantage: at 10 plants a laptop finds the exact optimum instantly</li><li>Not ready to operate a real grid (no network flows, ramp limits or outages)</li><li>The solar day is stylised, not measured data</li></ul>
+            </div>
+          </div>
+        </article>
+        <article class="panel">
+          <h2 class="eyebrow">Data, credits, disclosures</h2>
+          <p class="small">Plants and demand: the 10-unit benchmark of Kazarlis, Bakirtzis &amp; Petridis, IEEE Trans. Power Systems 11(1), 1996, as tabulated in Rashed et al. (RE&amp;PQJ 2007). Published best 24-hour cost: <span class="mono">$563,938</span>; our MILP finds <span id="m-exact" class="mono">-</span>.</p>
+          <p class="small">Built with Qiskit, NumPy, SciPy (HiGHS MILP) and three.js. QAOA parameter interpolation follows Zhou et al., PRX 10, 021067 (2020). Built during the hackathon window with AI assistance (Claude); all code is original to this project and MIT licensed.</p>
+          <p class="small"><b>This effort is supported by Qollab &amp; IonQ.</b></p>
+        </article>
+      </div>
+    </section>
+  </main>
+  <div id="narrate" class="sr-only" aria-live="polite"></div>
+</div>
